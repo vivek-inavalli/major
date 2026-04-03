@@ -110,18 +110,46 @@ def detect_ner(text: str) -> Dict[str, List[str]]:
 
 def calculate_risk_score(detected: Dict[str, Any]) -> Dict[str, Any]:
     score = 0
-    for key in ["emails", "phones", "addresses", "aadhaar", "pan"]:
-        score += SCORES.get(key, 0) * len(detected["regex"].get(key, []))
-    score += 0.5 * len(detected["ner"].get("GPE", []))
-    score += 0.5 * len(detected["ner"].get("DATE", []))
-    score += 0.3 * len(detected["ner"].get("ORG", []))
-    score = min(score, 100)
-    if score <= 20:
+    
+    # Count PII detections
+    email_count = len(detected["regex"].get("emails", []))
+    phone_count = len(detected["regex"].get("phones", []))
+    address_count = len(detected["regex"].get("addresses", []))
+    aadhaar_count = len(detected["regex"].get("aadhaar", []))
+    pan_count = len(detected["regex"].get("pan", []))
+    gpe_count = len(detected["ner"].get("GPE", []))
+    date_count = len(detected["ner"].get("DATE", []))
+    org_count = len(detected["ner"].get("ORG", []))
+    
+    # Critical PII (should block deployment)
+    if aadhaar_count > 0 or pan_count > 0:
+        return {"score": 100, "level": "High"}
+    
+    # Calculate weighted score
+    if address_count > 0:
+        score += 40
+    if phone_count > 0:
+        score += 35
+    if email_count > 0:
+        score += 20
+    if gpe_count > 2:
+        score += 15
+    if date_count > 0:
+        score += 5
+    if org_count > 0:
+        score += 5
+    
+    score = min(score, 99)  # Cap at 99 for High risk (not 100)
+    
+    if score == 0:
+        level = "Low"
+    elif score <= 20:
         level = "Low"
     elif score <= 50:
         level = "Medium"
     else:
         level = "High"
+    
     return {"score": int(score), "level": level}
 
 def generate_recommendations(detected: Dict[str, Any], risk_level: str) -> List[str]:
@@ -216,3 +244,32 @@ def report(audit_id: str):
     if not os.path.exists(path):
         create_pdf_report(audit_id, audit)
     return FileResponse(path, media_type="application/pdf")
+
+@app.post("/audit/{audit_id}/ship")
+def ship_audit(audit_id: str):
+    """Validate audit before shipping to production."""
+    audit = audits.find_one({"_id": audit_id})
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    
+    risk_level = audit["risk"]["level"]
+    risk_score = audit["risk"]["score"]
+    
+    # Only allow shipping Low-risk audits
+    if risk_level == "Low":
+        return {
+            "status": "approved",
+            "message": "Audit passed security check. Safe to ship.",
+            "risk_score": risk_score,
+            "risk_level": risk_level
+        }
+    elif risk_level == "Medium":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot ship: Medium risk detected (score: {risk_score}). Please review and remediate issues."
+        )
+    else:  # High
+        raise HTTPException(
+            status_code=403,
+            detail=f"Cannot ship: High risk detected (score: {risk_score}). Critical PII found. Please remove sensitive data."
+        )
