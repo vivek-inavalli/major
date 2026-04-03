@@ -80,7 +80,7 @@ def tokenize_text(text: str) -> List[str]:
     return [t for t in tokens if t not in STOPWORDS]
 
 EMAIL_REGEX = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
-PHONE_REGEX = r"\b(?:\+?\d{1,3}[-.\s]?)?(?:\d{10}|\d{3}[-.\s]?\d{3}[-.\s]?\d{4})\b"
+PHONE_REGEX = r"\b\d{10}\b"
 AADHAAR_REGEX = r"\b\d{4}\s?\d{4}\s?\d{4}\b"
 PAN_REGEX = r"\b[A-Z]{5}[0-9]{4}[A-Z]\b"
 ADDRESS_REGEX = r"\b\d{1,5}\s[A-Za-z0-9\s,.-]{5,}(Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Nagar|Colony|Sector)\b"
