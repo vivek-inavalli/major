@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Trash2, Download, Loader } from "lucide-react";
+import { Trash2, Download, Loader } from "lucide-react";
 
 interface AuditResult {
   id?: string;
@@ -41,7 +41,7 @@ export default function AuditHistory() {
           }));
 
           setAudits(
-            normalized.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+            normalized.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)),
           );
         }
       } catch (error) {
@@ -87,7 +87,7 @@ export default function AuditHistory() {
     if (!audit.id) return;
     try {
       const response = await fetch(
-        `http://localhost:8000/audit/${audit.id}/report`
+        `http://localhost:8000/audit/${audit.id}/report`,
       );
       if (response.ok) {
         const blob = await response.blob();
@@ -149,7 +149,7 @@ export default function AuditHistory() {
                   </div>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-semibold border ${getRiskColor(
-                      audit.riskLevel
+                      audit.riskLevel,
                     )}`}
                   >
                     {(audit.riskLevel || "low").toUpperCase()} -{" "}
@@ -174,7 +174,6 @@ export default function AuditHistory() {
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </div>
             </div>
           </Card>
