@@ -7,6 +7,7 @@ import { Trash2, Download, Loader } from "lucide-react";
 
 interface AuditResult {
   id?: string;
+  name?: string;
   timestamp?: number;
   method: string;
   riskScore: number;
@@ -29,6 +30,7 @@ export default function AuditHistory() {
 
           const normalized: AuditResult[] = auditList.map((a: any) => ({
             id: a._id,
+            name: a.name || "Unknown Audit",
             timestamp: a.timestamp ? Date.parse(a.timestamp) : Date.now(),
             method: a.source?.type || "unknown",
             riskScore: a.risk?.score ?? 0,
@@ -137,13 +139,16 @@ export default function AuditHistory() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-4">
-                  <div>
+                  <div className="flex-1">
+                    <p className="text-base font-semibold text-foreground">
+                      {audit.name || "Unknown Audit"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {audit.timestamp
                         ? new Date(audit.timestamp).toLocaleString()
                         : "Recently"}
                     </p>
-                    <p className="text-sm text-muted-foreground capitalize mt-1">
+                    <p className="text-xs text-muted-foreground capitalize mt-1">
                       {audit.method} Audit
                     </p>
                   </div>

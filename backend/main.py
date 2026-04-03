@@ -365,12 +365,24 @@ class AuditRequest(BaseModel):
 
 @app.post("/audit")
 def audit(payload: AuditRequest):
+    # Determine source and generate name
     if payload.url:
         raw = scrape_website_text(payload.url)
+        source_type = "URL"
+        source_value = payload.url
+        # Extract domain name for audit name
+        from urllib.parse import urlparse
+        domain = urlparse(payload.url).netloc.replace("www.", "")
+        audit_name = f"Audit - {domain}"
     elif payload.text:
         raw = payload.text
+        source_type = "Text"
+        source_value = raw[:100] + "..." if len(raw) > 100 else raw
+        # Use first 50 chars of text as name
+        audit_name = f"Text Audit - {raw[:40]}".replace("\n", " ")
     else:
         raise HTTPException(status_code=400, detail="Provide url or text")
+    
     cleaned = clean_text(raw)
     detected = {
         "regex": detect_regex_pii(cleaned),
@@ -381,13 +393,18 @@ def audit(payload: AuditRequest):
     audit_id = str(uuid.uuid4())
     data = {
         "_id": audit_id,
+        "name": audit_name,
+        "source": {
+            "type": source_type,
+            "value": source_value
+        },
         "timestamp": str(datetime.datetime.now()),
         "detected": detected,
         "risk": risk,
         "recommendations": recs
     }
     audits.insert_one(data)
-    return {"audit_id": audit_id, "risk": risk, "detected": detected, "recommendations": recs}
+    return {"audit_id": audit_id, "name": audit_name, "risk": risk, "detected": detected, "recommendations": recs}
 
 @app.post("/audit/upload")
 async def upload(file: UploadFile = File(...)):
@@ -397,7 +414,7 @@ async def upload(file: UploadFile = File(...)):
 
 @app.get("/audit")
 def list_audits():
-    return {"audits": list(audits.find({}, {"_id":1,"timestamp":1,"risk":1}))}
+    return {"audits": list(audits.find({}, {"_id":1,"name":1,"timestamp":1,"risk":1,"source":1}))}
 
 @app.get("/audit/{audit_id}")
 def get_audit(audit_id: str):
