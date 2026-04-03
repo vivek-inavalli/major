@@ -123,24 +123,21 @@ def calculate_risk_score(detected: Dict[str, Any]) -> Dict[str, Any]:
     gpe_count = len(detected["ner"].get("GPE", []))
     date_count = len(detected["ner"].get("DATE", []))
     org_count = len(detected["ner"].get("ORG", []))
+    person_count = len(detected["ner"].get("PERSON", []))
     
     # Critical PII (should block deployment)
     if aadhaar_count > 0 or pan_count > 0:
         return {"score": 100, "level": "High"}
     
-    # Calculate weighted score
-    if address_count > 0:
-        score += 40
-    if phone_count > 0:
-        score += 35
-    if email_count > 0:
-        score += 20
-    if gpe_count > 2:
-        score += 15
-    if date_count > 0:
-        score += 5
-    if org_count > 0:
-        score += 5
+    # Calculate weighted score based on QUANTITY, not just presence
+    # This ensures different audits show different risk scores
+    score += min(address_count * 12, 40)  # Up to 40 points for addresses
+    score += min(phone_count * 10, 35)    # Up to 35 points for phones
+    score += min(email_count * 5, 20)     # Up to 20 points for emails
+    score += min(person_count * 3, 15)    # Up to 15 points for person names
+    score += min(gpe_count * 2, 15)       # Up to 15 points for locations
+    score += min(date_count * 1, 10)      # Up to 10 points for dates
+    score += min(org_count * 1, 5)        # Up to 5 points for organizations
     
     score = min(score, 99)  # Cap at 99 for High risk (not 100)
     
