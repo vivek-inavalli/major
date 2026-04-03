@@ -132,9 +132,9 @@ def calculate_risk_score(detected: Dict[str, Any]) -> Dict[str, Any]:
         score += SCORES.get(key, 0) * len(detected["ner"].get(key, []))
     # Cap the score at 100 to represent a percentage
     score = min(score, 100)
-    if score <= 10:
+    if score <= 30:
         level = "Low"
-    elif score <= 20:
+    elif score <= 60:
         level = "Medium"
     else:
         level = "High"
