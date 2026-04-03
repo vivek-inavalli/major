@@ -130,6 +130,8 @@ def calculate_risk_score(detected: Dict[str, Any]) -> Dict[str, Any]:
         score += SCORES.get(key, 0) * len(detected["regex"].get(key, []))
     for key in ["GPE", "DATE", "ORG"]:
         score += SCORES.get(key, 0) * len(detected["ner"].get(key, []))
+    # Cap the score at 100 to represent a percentage
+    score = min(score, 100)
     if score <= 10:
         level = "Low"
     elif score <= 20:
