@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Trash2, Download, Loader } from "lucide-react";
+import { Trash2, Download, Loader } from "lucide-react";
 
 interface AuditResult {
   id?: string;
@@ -174,7 +174,6 @@ export default function AuditHistory() {
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </div>
             </div>
           </Card>
