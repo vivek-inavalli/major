@@ -11,8 +11,11 @@ import datetime
 from typing import Optional, Dict, Any, List
 from pymongo import MongoClient
 import spacy
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "privacy_auditor_db"
@@ -170,16 +173,192 @@ def generate_recommendations(detected: Dict[str, Any], risk_level: str) -> List[
 
 def create_pdf_report(audit_id: str, report_data: Dict[str, Any]) -> str:
     filepath = os.path.join(REPORT_DIR, f"{audit_id}.pdf")
-    doc = SimpleDocTemplate(filepath)
+    doc = SimpleDocTemplate(filepath, topMargin=0.75*inch, bottomMargin=0.75*inch)
     styles = getSampleStyleSheet()
+    
+    # Create custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#1a1a1a'),
+        spaceAfter=12,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#2c3e50'),
+        spaceAfter=10,
+        spaceBefore=12,
+        borderColor=colors.HexColor('#e0e0e0'),
+        borderPadding=5
+    )
+    
     content = []
-    content.append(Paragraph("Privacy Audit Report", styles['Title']))
-    content.append(Spacer(1, 10))
-    content.append(Paragraph(f"Risk Score: {report_data['risk']['score']} ({report_data['risk']['level']})", styles['Normal']))
-    content.append(Spacer(1, 10))
-    for rec in report_data["recommendations"]:
-        content.append(Paragraph(f"- {rec}", styles['Normal']))
-        content.append(Spacer(1, 5))
+    
+    # Header
+    content.append(Paragraph("Privacy & Security Audit Report", title_style))
+    content.append(Spacer(1, 12))
+    
+    # Audit Metadata
+    metadata = [
+        ["Audit ID:", audit_id],
+        ["Generated:", report_data.get('timestamp', 'N/A')],
+        ["Risk Level:", f"<b>{report_data['risk']['level']}</b>"],
+        ["Risk Score:", f"<b>{report_data['risk']['score']}/100</b>"]
+    ]
+    
+    metadata_table = Table(metadata, colWidths=[1.5*inch, 4*inch])
+    metadata_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f5f5f5')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+    ]))
+    content.append(metadata_table)
+    content.append(Spacer(1, 20))
+    
+    # Risk Assessment Section
+    content.append(Paragraph("Risk Assessment", heading_style))
+    
+    risk_level = report_data['risk']['level']
+    risk_color = {
+        'Low': '#27ae60',
+        'Medium': '#f39c12',
+        'High': '#e74c3c'
+    }.get(risk_level, '#95a5a6')
+    
+    risk_text = f"<font color='{risk_color}'><b>RISK LEVEL: {risk_level}</b></font><br/>"
+    risk_text += f"Risk Score: {report_data['risk']['score']}/100<br/>"
+    
+    if risk_level == 'Low':
+        risk_text += "Your content meets privacy standards with minimal PII exposure."
+    elif risk_level == 'Medium':
+        risk_text += "Your content contains sensitive information that should be reviewed and remediated."
+    else:
+        risk_text += "Your content contains critical PII that must be removed immediately before deployment."
+    
+    content.append(Paragraph(risk_text, styles['Normal']))
+    content.append(Spacer(1, 15))
+    
+    # Detailed Findings Section
+    content.append(Paragraph("Detailed Findings", heading_style))
+    
+    detected = report_data.get('detected', {})
+    findings_data = []
+    
+    # Regex-based PII
+    regex_pii = detected.get('regex', {})
+    
+    if regex_pii.get('emails'):
+        findings_data.append(['Emails Found', str(len(regex_pii['emails']))])
+    if regex_pii.get('phones'):
+        findings_data.append(['Phone Numbers', str(len(regex_pii['phones']))])
+    if regex_pii.get('addresses'):
+        findings_data.append(['Physical Addresses', str(len(regex_pii['addresses']))])
+    if regex_pii.get('aadhaar'):
+        findings_data.append(['Aadhaar Numbers (CRITICAL)', str(len(regex_pii['aadhaar']))])
+    if regex_pii.get('pan'):
+        findings_data.append(['PAN Numbers (CRITICAL)', str(len(regex_pii['pan']))])
+    
+    # NER-based entities
+    ner_entities = detected.get('ner', {})
+    
+    if ner_entities.get('PERSON'):
+        findings_data.append(['Person Names', str(len(ner_entities['PERSON']))])
+    if ner_entities.get('ORG'):
+        findings_data.append(['Organizations', str(len(ner_entities['ORG']))])
+    if ner_entities.get('GPE'):
+        findings_data.append(['Geographic Locations', str(len(ner_entities['GPE']))])
+    if ner_entities.get('DATE'):
+        findings_data.append(['Dates/Timestamps', str(len(ner_entities['DATE']))])
+    
+    if findings_data:
+        findings_table = Table(findings_data, colWidths=[3*inch, 2*inch])
+        findings_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bdc3c7')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
+        ]))
+        content.append(findings_table)
+    else:
+        content.append(Paragraph("No PII or sensitive data detected.", styles['Normal']))
+    
+    content.append(Spacer(1, 20))
+    
+    # Detailed PII Details (if any found)
+    has_pii = any([
+        regex_pii.get(key) for key in ['emails', 'phones', 'addresses', 'aadhaar', 'pan']
+    ]) or any([
+        ner_entities.get(key) for key in ['PERSON', 'ORG', 'GPE', 'DATE']
+    ])
+    
+    if has_pii:
+        content.append(Paragraph("PII Details", heading_style))
+        
+        if regex_pii.get('emails'):
+            content.append(Paragraph(f"<b>Emails:</b> {', '.join(regex_pii['emails'][:10])}", styles['Normal']))
+            if len(regex_pii['emails']) > 10:
+                content.append(Paragraph(f"... and {len(regex_pii['emails']) - 10} more", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        if regex_pii.get('phones'):
+            content.append(Paragraph(f"<b>Phone Numbers:</b> {', '.join(regex_pii['phones'][:10])}", styles['Normal']))
+            if len(regex_pii['phones']) > 10:
+                content.append(Paragraph(f"... and {len(regex_pii['phones']) - 10} more", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        if regex_pii.get('addresses'):
+            content.append(Paragraph(f"<b>Addresses:</b> {regex_pii['addresses'][0][:80] if regex_pii['addresses'] else 'N/A'}", styles['Normal']))
+            if len(regex_pii['addresses']) > 1:
+                content.append(Paragraph(f"... and {len(regex_pii['addresses']) - 1} more", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        if regex_pii.get('aadhaar'):
+            content.append(Paragraph("<b style='color: #e74c3c'>Aadhaar Numbers (CRITICAL):</b> Found and must be removed immediately", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        if regex_pii.get('pan'):
+            content.append(Paragraph("<b style='color: #e74c3c'>PAN Numbers (CRITICAL):</b> Found and must be removed immediately", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        if ner_entities.get('PERSON'):
+            names = ner_entities['PERSON'][:10]
+            content.append(Paragraph(f"<b>Person Names:</b> {', '.join(names)}", styles['Normal']))
+            if len(ner_entities['PERSON']) > 10:
+                content.append(Paragraph(f"... and {len(ner_entities['PERSON']) - 10} more", styles['Normal']))
+            content.append(Spacer(1, 8))
+        
+        content.append(PageBreak())
+    
+    # Recommendations Section
+    content.append(Paragraph("Recommendations", heading_style))
+    
+    for i, rec in enumerate(report_data.get("recommendations", []), 1):
+        content.append(Paragraph(f"{i}. {rec}", styles['Normal']))
+        content.append(Spacer(1, 8))
+    
+    content.append(Spacer(1, 20))
+    
+    # Footer
+    content.append(Paragraph("<hr/>", styles['Normal']))
+    footer_text = f"Report Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br/>"
+    footer_text += "This report is confidential and for authorized use only."
+    content.append(Paragraph(footer_text, styles['Normal']))
+    
     doc.build(content)
     return filepath
 
